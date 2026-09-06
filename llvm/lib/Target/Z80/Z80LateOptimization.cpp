@@ -1185,6 +1185,72 @@ bool Z80LateOptimization::runOnMachineFunction(MachineFunction &MF) {
         ++MII;
     }
 
+    // --- Peephole: memcpy argument swap via temporary BC → EX DE,HL ---
+    //
+    // LDIR wants HL=src and DE=dst, while the default Z80 C convention
+    // passes memcpy(dst, src, n) as HL=dst and DE=src. Lowering emits
+    // parallel copies into the fixed LDIR registers; after register
+    // allocation these can become:
+    //
+    //   ld c,l     ; BC = old HL = dst
+    //   ld b,h
+    //   ex de,hl   ; HL = src, DE = dst
+    //   ld e,c     ; redundant: DE already holds dst
+    //   ld d,b
+    //
+    // Once BC is dead after the sequence, the four byte copies only
+    // preserve a value that EX already placed in DE. Keeping just EX
+    // gives the compact setup for `memcpy(p, q, 16)`:
+    //   ex de,hl; ld bc,#16; ldir
+    for (MachineBasicBlock::iterator MII = MBB.begin(), MIE = MBB.end();
+         MII != MIE;) {
+      auto I1 = MII;
+      auto I2 = std::next(I1);
+      if (I2 == MIE) {
+        ++MII;
+        continue;
+      }
+      auto I3 = std::next(I2);
+      if (I3 == MIE) {
+        ++MII;
+        continue;
+      }
+      auto I4 = std::next(I3);
+      if (I4 == MIE) {
+        ++MII;
+        continue;
+      }
+      auto I5 = std::next(I4);
+      if (I5 == MIE) {
+        ++MII;
+        continue;
+      }
+
+      if (!isLD8(*I1, Z80::C, Z80::L) ||
+          !isLD8(*I2, Z80::B, Z80::H) ||
+          I3->getOpcode() != Z80::EX_DE_HL ||
+          !isLD8(*I4, Z80::E, Z80::C) ||
+          !isLD8(*I5, Z80::D, Z80::B)) {
+        ++MII;
+        continue;
+      }
+
+      auto After = std::next(I5);
+      if (!isRegDeadAfter(After, MBB, TRI, Z80::BC)) {
+        ++MII;
+        continue;
+      }
+
+      LLVM_DEBUG(dbgs() << "  Reducing memcpy register swap to EX DE,HL: "
+                        << *I3);
+      I1->eraseFromParent();
+      I2->eraseFromParent();
+      I4->eraseFromParent();
+      I5->eraseFromParent();
+      MII = After;
+      Changed = BlockChanged = true;
+    }
+
     // --- Peephole: LD A,r; DEC A; LD r,A; OR A; JR NZ → DEC r; JR NZ ---
     // Replaces a 5-instruction decrement-and-branch sequence (28T, 6B) with
     // DEC r; JR NZ (14T, 3B). DEC r sets Z flag correctly for JR NZ, and
