@@ -21,15 +21,11 @@ define void @test_memcpy(ptr %dst, ptr %src, i16 %n) {
 ; A proven non-zero constant keeps the compact inline LDIR lowering.
 define void @test_memcpy_constant(ptr %dst, ptr %src) {
 ; CHECK-LABEL: _test_memcpy_constant:
-; The incoming pointers are HL=dst and DE=src; memcpy swaps them for LDIR:
-; HL=src, DE=dst, BC=16.
-; CHECK:       ld c,l
-; CHECK-NEXT:  ld b,h
-; CHECK-NEXT:  ex de,hl
-; CHECK-NEXT:  ld e,c
-; CHECK-NEXT:  ld d,b
+; The incoming pointers are HL=dst and DE=src; memcpy swaps them with EX
+; so LDIR sees HL=src, DE=dst, BC=16 without temporary byte copies.
+; CHECK:       ex de,hl
 ; CHECK-NEXT:  ld bc,#16
-; CHECK:       ldir
+; CHECK-NEXT:  ldir
   call void @llvm.memcpy.p0.p0.i16(ptr %dst, ptr %src, i16 16, i1 false)
   ret void
 }
