@@ -57,6 +57,12 @@ public:
   // pass will resolve.
   bool useStaticFrames() const;
 
+  // Returns true when the user asserts that no external code will call back
+  // into this module via function pointers (-z80-assume-no-callbacks).
+  // Unlike -ffreestanding this does not change the language mode or suppress
+  // hosted-C builtins; it only affects Z80NonReentrant's call-graph model.
+  bool assumeNoCallbacks() const;
+
   MachineFunctionInfo *
   createMachineFunctionInfo(BumpPtrAllocator &Allocator, const Function &F,
                             const TargetSubtargetInfo *STI) const override;

@@ -87,7 +87,16 @@ public:
 
 private:
   bool isContextRoot(const Function &F) const {
-    return F.hasFnAttribute("interrupt");
+    return F.hasFnAttribute("interrupt") || F.hasFnAttribute("z80-entry-point");
+  }
+
+  // Returns true if any non-declaration in M carries "z80-entry-point",
+  // meaning the user has explicitly declared all external entry points.
+  static bool hasEntryPointAnnotations(const Module &M) {
+    for (const Function &F : M.functions())
+      if (!F.isDeclaration() && F.hasFnAttribute("z80-entry-point"))
+        return true;
+    return false;
   }
 
   void markReentrantReachable(const CallGraphNode &CGN);
@@ -208,11 +217,15 @@ bool Z80NonReentrantImpl::run(Module &M) {
   // which lets the SCC walk see recursion that passes through code outside
   // the module or through a function pointer.
   assert(CG.getCallsExternalNode()->empty());
-  if (isFreestandingModule(M)) {
-    // In a freestanding / closed-world module (e.g. firmware ROM or OS kernel),
-    // foreign code outside the module does not exist, so external calls cannot
-    // re-enter arbitrary module functions. Indirect calls through function
-    // pointers still conservatively reach any locally address-taken function.
+  if (isFreestandingModule(M) || hasEntryPointAnnotations(M) ||
+      TM.assumeNoCallbacks()) {
+    // Closed-world: either the module is freestanding (no hosted C library,
+    // -ffreestanding), the user has explicitly annotated every entry point
+    // ("z80-entry-point" fn attribute), or the user has asserted that no
+    // external code will call back via function pointers
+    // (-z80-assume-no-callbacks). In all three cases, indirect calls through
+    // function pointers can still reach locally address-taken functions, but
+    // the open-world ExternalCallingNode edge is not added.
     for (Function &F : M.functions()) {
       if (!F.isDeclaration() && F.hasAddressTaken())
         CG.getCallsExternalNode()->addCalledFunction(nullptr, CG[&F]);
@@ -292,13 +305,28 @@ bool Z80NonReentrantImpl::run(Module &M) {
     ReachableFromCurrent.clear();
   };
 
-  visitContext(*CG.getExternalCallingNode());
-  FinishContext();
-  for (Function &F : M.functions()) {
-    if (F.isDeclaration() || !isContextRoot(F))
-      continue;
-    visitContext(*CG[&F]);
+  // If every external entry point is explicitly annotated with
+  // "z80-entry-point", we know the complete set of contexts: each annotated
+  // function is its own independent context root, and the open-world
+  // ExternalCallingNode seed is not needed.  This is more precise than
+  // -ffreestanding (which is module-wide) and lets a hosted CP/M program
+  // declare that main is called exactly once while still linking stdlib.
+  if (hasEntryPointAnnotations(M)) {
+    for (Function &F : M.functions()) {
+      if (F.isDeclaration() || !isContextRoot(F))
+        continue;
+      visitContext(*CG[&F]);
+      FinishContext();
+    }
+  } else {
+    visitContext(*CG.getExternalCallingNode());
     FinishContext();
+    for (Function &F : M.functions()) {
+      if (F.isDeclaration() || !isContextRoot(F))
+        continue;
+      visitContext(*CG[&F]);
+      FinishContext();
+    }
   }
 
   CG.getCallsExternalNode()->removeAllCalledFunctions();

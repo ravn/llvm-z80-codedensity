@@ -48,9 +48,11 @@ namespace {
 class Z80AsmPrinter : public AsmPrinter {
   Z80MCInstLower InstLowering;
 
-  // For C_LINE deduplication: only emit when file/line changes.
+  // For C_LINE deduplication: only emit when file/line/scope changes.
   unsigned LastCLineNum = 0;
   StringRef LastCLineFile;
+  const DIScope *LastCLineScope = nullptr;
+
 
 public:
   explicit Z80AsmPrinter(TargetMachine &TM,
@@ -115,11 +117,40 @@ void Z80AsmPrinter::emitInstruction(const MachineInstr *MI) {
     if (const DILocation *Loc = MI->getDebugLoc()) {
       unsigned Line = Loc->getLine();
       StringRef File = Loc->getFilename();
-      if (Line && (Line != LastCLineNum || File != LastCLineFile)) {
+      const DIScope *Scope = Loc->getScope();
+      if (Line && (Line != LastCLineNum || File != LastCLineFile ||
+                   Scope != LastCLineScope)) {
+        // Walk the scope chain to find the enclosing function name and the
+        // lexical block depth/index, matching sccz80's
+        // "file.c::func::level::scope" format understood by z88dk-ticks.
+        StringRef FuncName;
+        unsigned Level = 0;
+        unsigned ScopeBlock = 0;
+        const DIScope *S = Scope;
+        while (S) {
+          if (const auto *SP = dyn_cast<DISubprogram>(S)) {
+            FuncName = SP->getName();
+            break;
+          }
+          if (isa<DILexicalBlock>(S)) {
+            if (Level == 0)
+              ScopeBlock = Line; // use line as a proxy scope id
+            Level++;
+          }
+          S = S->getScope();
+        }
+
+        std::string FilePart = File.str();
+        if (!FuncName.empty()) {
+          FilePart += "::" + FuncName.str() +
+                      "::" + std::to_string(Level) +
+                      "::" + std::to_string(ScopeBlock);
+        }
         OutStreamer->emitRawText("\tC_LINE " + Twine(Line) +
-                                ", \"" + File + "\"");
+                                ", \"" + FilePart + "\"");
         LastCLineNum = Line;
         LastCLineFile = File;
+        LastCLineScope = Scope;
       }
     }
   }

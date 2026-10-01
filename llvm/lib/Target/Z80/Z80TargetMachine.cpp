@@ -83,11 +83,22 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeZ80Target() {
 // static memory than on the stack, so frame lowering keeps a size build's
 // wide slots on the stack; an eight-bit slot is a win either way. Explicit
 // true/false overrides the default.
+static cl::opt<bool> AssumeNoCallbacksOpt(
+    "z80-assume-no-callbacks",
+    cl::desc("Assume no external code calls back into this module via function "
+             "pointers. Lets Z80NonReentrant give static frames to externally-"
+             "linked entry points like main without -ffreestanding. Default: off."),
+    cl::init(false), cl::Hidden);
+
 static cl::opt<cl::boolOrDefault> EnableStaticFramesOpt(
     "z80-static-frames",
     cl::desc("Allocate the frames of provably non-reentrant functions in "
              "static memory (default: on)"),
     cl::init(cl::boolOrDefault::BOU_UNSET), cl::Hidden);
+
+bool Z80TargetMachine::assumeNoCallbacks() const {
+  return AssumeNoCallbacksOpt;
+}
 
 bool Z80TargetMachine::useStaticFrames() const {
   if (getOptLevel() == CodeGenOptLevel::None)
