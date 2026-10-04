@@ -1,5 +1,7 @@
 // RUN: %clang_cc1 -triple z80-unknown-none-z88dk -fdefault-calling-conv=sdcccall0 -emit-llvm -o - %s | FileCheck %s --check-prefix=CC0
 // RUN: %clang_cc1 -triple z80-unknown-none-z88dk -fdefault-calling-conv=sdcccall0 -O2 -emit-llvm -o - %s | FileCheck %s --check-prefix=CC0
+// RUN: %clang_cc1 -triple z80-unknown-none-z88dk -emit-llvm -o - %s | FileCheck %s --check-prefix=CC0
+// RUN: %clang_cc1 -triple z80-unknown-none-z88dk -fdefault-calling-conv=sdcccall1 -emit-llvm -o - %s | FileCheck %s --check-prefix=CC1
 // RUN: %clang_cc1 -triple z80 -fdefault-calling-conv=sdcccall1 -emit-llvm -o - %s | FileCheck %s --check-prefix=CC1
 // RUN: %clang_cc1 -triple z80 -emit-llvm -o - %s | FileCheck %s --check-prefix=CC1
 

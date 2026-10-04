@@ -13084,12 +13084,9 @@ QualType ASTContext::GetBuiltinType(unsigned Id,
   bool Variadic = (TypeStr[0] == '.');
 
   FunctionType::ExtInfo EI(Target->getDefaultCallingConv());
-  // Library declarations must match default0 program calls on Z80.
-  // Otherwise an implicit printf declaration overrides the header's ABI.
-  if (Target->getTriple().getArch() == llvm::Triple::z80 &&
-      LangOpts.getDefaultCallingConv() == LangOptions::DCC_Z80SDCCCall0 &&
-      (BuiltinInfo.isPredefinedLibFunction(Id) || BuiltinInfo.isLibFunction(Id)))
-    EI = EI.withCallingConv(CC_Z80SDCCCall0);
+  // Library builtins follow the program default, including variadic fallback.
+  if (BuiltinInfo.isPredefinedLibFunction(Id) || BuiltinInfo.isLibFunction(Id))
+    EI = EI.withCallingConv(getDefaultCallingConvention(Variadic, false));
   if (BuiltinInfo.isNoReturn(Id))
     EI = EI.withNoReturn(true);
 
