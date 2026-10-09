@@ -186,8 +186,30 @@ bool Z80NonReentrantImpl::run(Module &M) {
   SmallPtrSet<const CallGraphNode *, 32> Analyzed;
   for (auto I = scc_begin(&CG), E = scc_end(&CG); I != E; ++I) {
     Analyzed.insert(I->begin(), I->end());
-    if (I->size() > 1)
+    if (I->size() > 1) {
+      // A multi-node SCC normally indicates recursion and cannot be marked
+      // doesNotRecurse. Exception: if every real function in the SCC asserts
+      // no-recurse, accept the programmer's assertion for all of them.
+      bool AllNoRecurse = true;
+      for (const CallGraphNode *CGN : *I) {
+        const Function *F = CGN->getFunction();
+        if (F && !F->isDeclaration() && !TM.getSubtargetImpl(*F)->hasNoRecurse()) {
+          AllNoRecurse = false;
+          break;
+        }
+      }
+      if (!AllNoRecurse)
+        continue;
+      for (CallGraphNode *CGN : *I) {
+        Function *F = CGN->getFunction();
+        if (!F || F->isDeclaration() || F->doesNotRecurse())
+          continue;
+        F->setDoesNotRecurse();
+        ++NumDoesNotRecurse;
+        Changed = true;
+      }
       continue;
+    }
     const CallGraphNode &N = **I->begin();
     Function *F = N.getFunction();
     if (!F || F->isDeclaration() || F->doesNotRecurse())
