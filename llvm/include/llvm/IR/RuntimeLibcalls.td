@@ -3770,7 +3770,8 @@ def isZ80Z88dkEnv : RuntimeLibcallAvailability<(all_of IsZ80Family, IsZ88dkEnv)>
 defvar Z80CompilerRtImpls =
   (add Z80MemCalls,
        LibcallsWithCC<(add __udivqi3, __umodqi3), Z80_BUILTIN>,
-       __umulhi3, __divmodhi4, __udivmodhi4, __divmodsi4, __udivmodsi4);
+       __umulhi3, __mulhisi3, __umulhisi3,
+       __divmodhi4, __udivmodhi4, __divmodsi4, __udivmodsi4);
 
 def Z80CompilerRt : LibcallLibrary<"compiler-rt",
   (add Z80CompilerRtImpls,
