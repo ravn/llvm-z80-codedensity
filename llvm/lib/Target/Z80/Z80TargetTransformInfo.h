@@ -184,13 +184,18 @@ public:
   // Z80 has only 3 GP register pairs (BC, DE, HL). Inlining large functions
   // causes massive register spilling that dwarfs the benefit.
   // Allow inlining for:
-  //   - functions marked inlinehint (e.g. Rust iterators)
-  //   - small functions (≤ 10 instructions) where call overhead dominates
+  //   - functions marked alwaysinline or inlinehint (e.g. Rust iterators)
+  //   - small functions (<= 10 instructions) where call overhead dominates
+  //   - single-use local functions: inlining never duplicates code, eliminates
+  //     call/return overhead, and enables dead function elimination.
   bool areInlineCompatible(const Function *Caller,
                            const Function *Callee) const override {
-    if (Callee->hasFnAttribute(Attribute::InlineHint))
+    if (Callee->hasFnAttribute(Attribute::AlwaysInline) ||
+        Callee->hasFnAttribute(Attribute::InlineHint))
       return true;
     if (Callee->getInstructionCount() <= 10)
+      return true;
+    if (Callee->hasLocalLinkage() && Callee->hasOneUse())
       return true;
     return false;
   }
