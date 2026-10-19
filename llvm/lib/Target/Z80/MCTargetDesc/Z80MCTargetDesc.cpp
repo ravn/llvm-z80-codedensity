@@ -111,6 +111,22 @@ static MCTargetStreamer *createMCAsmTargetStreamer(MCStreamer &S,
   return new Z80TargetAsmStreamer(S, OS);
 }
 
+class Z80TargetNullStreamer final : public Z80TargetStreamer {
+public:
+  explicit Z80TargetNullStreamer(MCStreamer &S) : Z80TargetStreamer(S) {}
+
+private:
+  bool hasBSS() override { return false; }
+  bool hasData() override { return false; }
+  bool hasInitArray() override { return false; }
+  bool hasFiniArray() override { return false; }
+  void stronglyReference(MCSymbol *Sym) override {}
+};
+
+static MCTargetStreamer *createZ80NullTargetStreamer(MCStreamer &S) {
+  return new Z80TargetNullStreamer(S);
+}
+
 static MCInstrAnalysis *createZ80MCInstrAnalysis(const MCInstrInfo *Info) {
   return new Z80MCInstrAnalysis(Info);
 }
@@ -129,6 +145,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeZ80TargetMC() {
     TargetRegistry::RegisterObjectTargetStreamer(*T,
                                                  createZ80ObjectTargetStreamer);
     TargetRegistry::RegisterAsmTargetStreamer(*T, createMCAsmTargetStreamer);
+    TargetRegistry::RegisterNullTargetStreamer(*T, createZ80NullTargetStreamer);
     TargetRegistry::RegisterMCAsmBackend(*T, createZ80AsmBackend);
   }
 }
