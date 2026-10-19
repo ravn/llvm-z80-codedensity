@@ -3943,21 +3943,28 @@ bool Z80InstructionSelector::select(MachineInstr &MI) {
     switch (IntrinsicID) {
     case Intrinsic::z80_in: {
       // i8 @llvm.z80.in(i8 port)
-      // IN A,(C) where C contains the port number
       Register DstReg = MI.getOperand(0).getReg();
       Register PortReg = MI.getOperand(2).getReg();
 
-      // Constrain port register to C
-      if (!RBI.constrainGenericRegister(PortReg, Z80::GR8RegClass, MRI))
-        return false;
       if (!RBI.constrainGenericRegister(DstReg, Z80::GR8RegClass, MRI))
         return false;
 
-      // Move port to C if not already there
+      // When the port is a constant, emit the 2-byte instruction IN A,(n)
+      if (auto C = getIConstantVRegValWithLookThrough(PortReg, MRI)) {
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(Z80::IN_A_n))
+            .addImm(C->Value.getZExtValue() & 0xFF);
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(TargetOpcode::COPY), DstReg)
+            .addReg(Z80::A);
+        MI.eraseFromParent();
+        return true;
+      }
+
+      // Variable port: IN r,(C) where C contains the port number
+      if (!RBI.constrainGenericRegister(PortReg, Z80::GR8RegClass, MRI))
+        return false;
+
       BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(TargetOpcode::COPY), Z80::C)
           .addReg(PortReg);
-
-      // IN r,(C), into any register
       BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(Z80::IN8_C), DstReg);
 
       MI.eraseFromParent();
@@ -3966,21 +3973,28 @@ bool Z80InstructionSelector::select(MachineInstr &MI) {
 
     case Intrinsic::z80_out: {
       // void @llvm.z80.out(i8 port, i8 value)
-      // OUT (C),A where C contains the port number
       Register PortReg = MI.getOperand(1).getReg();
       Register ValueReg = MI.getOperand(2).getReg();
 
-      // Constrain registers
-      if (!RBI.constrainGenericRegister(PortReg, Z80::GR8RegClass, MRI))
-        return false;
       if (!RBI.constrainGenericRegister(ValueReg, Z80::GR8RegClass, MRI))
         return false;
 
-      // Move port to C
+      // When the port is a constant, emit the 2-byte instruction OUT (n),A
+      if (auto C = getIConstantVRegValWithLookThrough(PortReg, MRI)) {
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(TargetOpcode::COPY), Z80::A)
+            .addReg(ValueReg);
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(Z80::OUT_n_A))
+            .addImm(C->Value.getZExtValue() & 0xFF);
+        MI.eraseFromParent();
+        return true;
+      }
+
+      // Variable port: OUT (C),r where C contains the port number
+      if (!RBI.constrainGenericRegister(PortReg, Z80::GR8RegClass, MRI))
+        return false;
+
       BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(TargetOpcode::COPY), Z80::C)
           .addReg(PortReg);
-
-      // OUT (C),r, from any register
       BuildMI(MBB, MI, MI.getDebugLoc(), TII.get(Z80::OUT8_C)).addReg(ValueReg);
 
       MI.eraseFromParent();
