@@ -48,6 +48,21 @@ Value *CodeGenFunction::EmitZ80BuiltinExpr(unsigned BuiltinID,
         Intrinsic::getOrInsertDeclaration(&CGM.getModule(), Intrinsic::z80_set_i);
     return Builder.CreateCall(F, {Val});
   }
+  case clang::Z80::BI__builtin_z80_in: {
+    // unsigned char __builtin_z80_in(unsigned char port) -> llvm.z80.in(i8)
+    Value *Port = EmitScalarExpr(E->getArg(0));
+    Function *F =
+        Intrinsic::getOrInsertDeclaration(&CGM.getModule(), Intrinsic::z80_in);
+    return Builder.CreateCall(F, {Port});
+  }
+  case clang::Z80::BI__builtin_z80_out: {
+    // void __builtin_z80_out(unsigned char port, unsigned char val) -> llvm.z80.out(i8, i8)
+    Value *Port = EmitScalarExpr(E->getArg(0));
+    Value *Val = EmitScalarExpr(E->getArg(1));
+    Function *F =
+        Intrinsic::getOrInsertDeclaration(&CGM.getModule(), Intrinsic::z80_out);
+    return Builder.CreateCall(F, {Port, Val});
+  }
   }
 
   Function *F = Intrinsic::getOrInsertDeclaration(&CGM.getModule(), IntID);

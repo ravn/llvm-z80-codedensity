@@ -60,3 +60,20 @@ def Z80SetI : TargetBuiltin {
   let Prototype = "void(unsigned char)";
   let Features = "z80";
 }
+
+// Read a byte from an I/O port (IN r,(C)).
+def Z80In : TargetBuiltin {
+  let Spellings = ["__builtin_z80_in"];
+  let Attributes = [NoThrow];
+  let Prototype = "unsigned char(unsigned char)";
+  let Features = "z80";
+}
+
+// Write a byte to an I/O port (OUT (C),r).
+def Z80Out : TargetBuiltin {
+  let Spellings = ["__builtin_z80_out"];
+  let Attributes = [NoThrow];
+  let Prototype = "void(unsigned char, unsigned char)";
+  let Features = "z80";
+}
+
