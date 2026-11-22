@@ -102,7 +102,7 @@ jobs:
       - name: Build z88dk-ticks
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq flex bison
+          sudo apt-get install -y -qq flex bison sdcc
           make -C z88dk/src/ticks -j"$(nproc)"
           echo "$GITHUB_WORKSPACE/z88dk/src/ticks" >> "$GITHUB_PATH"
 
@@ -130,10 +130,15 @@ jobs:
       - name: Build clang + lld + LLVM binutils the test-runner shells out to
         run: ninja -C build clang lld llvm-objcopy llvm-nm llvm-size
 
+      - name: Run test-runner regression tests
+        run: |
+          cd z80-utils/test-runner
+          BUILD_DIR=../../build cargo test
+
       - name: Run test-runner clang suite (runtime/value oracle)
         run: |
           cd z80-utils/test-runner
-          BUILD_DIR=../../build cargo run --release -- clang
+          BUILD_DIR=../../build cargo run --release -- clang -emu-timeout 30
 
       - name: Summary
         if: always()

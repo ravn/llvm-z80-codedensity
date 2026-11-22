@@ -25,7 +25,14 @@ fn main() -> ExitCode {
     suite::cleanup_old_tmp_dirs(&paths.llc_test_dir());
     suite::cleanup_old_tmp_dirs(&paths.project_dir.join("benchmark"));
 
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    match extract_emulator_timeout(&mut args) {
+        Ok(timeout) => emulator::set_wall_timeout(timeout),
+        Err(error) => {
+            eprintln!("{error}");
+            return ExitCode::FAILURE;
+        }
+    }
 
     // No arguments prints usage rather than launching a long run: the
     // suites take minutes, and starting one by accident is worse than a
@@ -58,6 +65,50 @@ fn main() -> ExitCode {
     }
 }
 
+/// Consume the common option before command-specific argument parsing.
+fn extract_emulator_timeout(args: &mut Vec<String>) -> Result<std::time::Duration, String> {
+    let mut seconds = 900;
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] != "-emu-timeout" {
+            i += 1;
+            continue;
+        }
+        let value = args.get(i + 1).ok_or("-emu-timeout requires seconds")?;
+        seconds = value.parse::<u64>()
+            .ok().filter(|value| *value > 0)
+            .ok_or_else(|| format!("invalid -emu-timeout: {value}; expected positive integer seconds"))?;
+        args.drain(i..i + 2);
+    }
+    Ok(std::time::Duration::from_secs(seconds))
+}
+
+#[cfg(test)]
+mod timeout_tests {
+    use super::extract_emulator_timeout;
+    use std::time::Duration;
+
+    #[test]
+    fn default_and_override_preserve_suite_arguments() {
+        let mut args = vec!["clang".into(), "test_name".into()];
+        assert_eq!(extract_emulator_timeout(&mut args).unwrap(), Duration::from_secs(900));
+        assert_eq!(args, ["clang", "test_name"]);
+        let mut args = vec!["-emu-timeout".into(), "30".into(), "clang".into(),
+                            "-emu-timeout".into(), "2".into(), "test_name".into()];
+        assert_eq!(extract_emulator_timeout(&mut args).unwrap(), Duration::from_secs(2));
+        assert_eq!(args, ["clang", "test_name"]);
+    }
+
+    #[test]
+    fn invalid_timeout_is_an_error() {
+        for value in ["0", "-1", "abc", "18446744073709551616"] {
+            let mut args = vec!["clang".into(), "-emu-timeout".into(), value.into()];
+            assert!(extract_emulator_timeout(&mut args).is_err());
+        }
+        assert!(extract_emulator_timeout(&mut vec!["-emu-timeout".into()]).is_err());
+    }
+}
+
 /// Create a callback that prints each test result immediately to stdout.
 fn print_callback() -> OnResult {
     Box::new(|result, reg_name| {
@@ -87,6 +138,7 @@ Commands:
 Common options:
   -target <z80|sm83>   Target architecture (default: z80)
   -opt <O0|O1|...|all> Optimization level
+  -emu-timeout <N>     Wall-clock seconds per emulator process (default: 900)
 
 bench and stdcbench options:
   -sdcc-allocs <N>     SDCC's --max-allocs-per-node, how hard its register
